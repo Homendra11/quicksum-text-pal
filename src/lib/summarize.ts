@@ -1,63 +1,124 @@
 
-// This is a placeholder for real summarization logic that would use a model like BART or T5
-// In a real implementation, this would connect to a backend service or API
+// Real text summarization implementation using a simple extractive approach
+// In a production app, you would integrate with AI models or APIs
 
 // Helper function to get a random delay between 1-3 seconds
 const getRandomDelay = () => Math.floor(Math.random() * 2000) + 1000;
 
-// Function to generate fake keywords based on input text
-const generateFakeKeywords = (text: string): string[] => {
-  const commonKeywords = [
-    "artificial intelligence", "machine learning", "natural language processing",
-    "data science", "technology", "innovation", "research", "development",
-    "user experience", "algorithms", "neural networks", "deep learning"
-  ];
+// Function to extract key sentences based on scoring
+const extractKeyPhrases = (text: string, maxSentences: number): string[] => {
+  // Split text into sentences (simple split by period, exclamation mark, or question mark)
+  const sentences = text
+    .replace(/([.?!])\s*(?=[A-Z])/g, "$1|")
+    .split("|")
+    .filter(sentence => sentence.trim().length > 10);
   
-  // Randomly select 4-8 keywords
-  const numKeywords = Math.floor(Math.random() * 4) + 4;
-  return commonKeywords.sort(() => 0.5 - Math.random()).slice(0, numKeywords);
+  if (sentences.length <= maxSentences) {
+    return sentences;
+  }
+  
+  // Calculate sentence scores based on:
+  // 1. Word count (middle length sentences are favored)
+  // 2. Position (earlier sentences often contain key information)
+  // 3. Keyword density (sentences with more common words from the text)
+  
+  // First, get the most common meaningful words
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 3 && !commonStopWords.includes(word));
+  
+  const wordFrequency: Record<string, number> = {};
+  words.forEach(word => {
+    wordFrequency[word] = (wordFrequency[word] || 0) + 1;
+  });
+  
+  // Sort words by frequency
+  const keywords = Object.keys(wordFrequency)
+    .sort((a, b) => wordFrequency[b] - wordFrequency[a])
+    .slice(0, 15);
+  
+  // Score each sentence
+  const sentenceScores = sentences.map((sentence, index) => {
+    const wordCount = sentence.split(/\s+/).length;
+    const positionScore = 1 - (index / sentences.length); // Earlier sentences get higher score
+    
+    // Calculate keyword score
+    const lowerSentence = sentence.toLowerCase();
+    const keywordScore = keywords.reduce((score, keyword) => {
+      return score + (lowerSentence.includes(keyword) ? 1 : 0);
+    }, 0) / keywords.length;
+    
+    // Length score - favor medium length sentences
+    const lengthScore = wordCount > 5 && wordCount < 40 ? 1 : 0.5;
+    
+    return {
+      sentence,
+      score: (positionScore * 0.3) + (keywordScore * 0.5) + (lengthScore * 0.2),
+      index
+    };
+  });
+  
+  // Sort sentences by score and take the top ones
+  const topSentences = sentenceScores
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxSentences)
+    .sort((a, b) => a.index - b.index) // Resort by original position
+    .map(item => item.sentence);
+  
+  return topSentences;
 };
+
+// Common English stop words to ignore
+const commonStopWords = [
+  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at", "be", "because",
+  "been", "before", "being", "below", "between", "both", "but", "by", "could", "did", "do", "does", "doing", "down", "during",
+  "each", "few", "for", "from", "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him",
+  "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "me", "more", "most", "my", "myself", "no",
+  "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", "our", "ours", "ourselves", "out", "over", "own",
+  "same", "she", "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", "themselves", "then",
+  "there", "these", "they", "this", "those", "through", "to", "too", "under", "until", "up", "very", "was", "we", "were",
+  "what", "when", "where", "which", "while", "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself",
+  "yourselves"
+];
 
 // Function to generate different summary types
 const generateSummaryByType = (text: string, type: string, tone: string, length: number): string => {
-  // This would be replaced by actual AI summarization in a real app
-  const wordCount = text.split(/\s+/).length;
-  const targetLength = Math.max(20, Math.floor((wordCount * length) / 100));
+  // Determine how many sentences to include based on the requested length
+  const textWordCount = text.split(/\s+/).length;
+  const sentenceCount = Math.max(2, Math.min(10, Math.floor(textWordCount * (length / 100) / 25)));
   
-  // Create a sample summary based on type
+  // Extract key sentences
+  const keySentences = extractKeyPhrases(text, sentenceCount);
+  
+  // Create a summary based on type
   switch (type) {
     case "bullets":
-      return generateBulletPoints(text, tone, targetLength);
+      return formatBulletPoints(keySentences, tone);
     case "tldr":
-      return generateTLDR(text, tone, targetLength);
+      return formatTLDR(keySentences, tone);
     case "paragraph":
     default:
-      return generateParagraph(text, tone, targetLength);
+      return formatParagraph(keySentences, tone);
   }
 };
 
-const generateParagraph = (text: string, tone: string, targetLength: number): string => {
-  // In a real app, we would use an actual AI model here
+const formatParagraph = (sentences: string[], tone: string): string => {
   const tonePrefix = getTonePrefix(tone);
-  
-  // Generate fake paragraph (this is just placeholder text)
-  return `${tonePrefix} This text discusses the development of advanced AI summarization technologies like QuickSum. It highlights the importance of creating user-friendly interfaces for complex natural language processing tasks. The article emphasizes how properly designed AI tools can save users significant time while maintaining comprehension of key concepts. Various summarization approaches are discussed, including extractive methods that preserve original phrasing and abstractive techniques that generate new text while maintaining meaning. The article also touches on the challenges of maintaining context and accuracy when condensing large documents.`;
+  return `${tonePrefix} ${sentences.join(" ")}`;
 };
 
-const generateBulletPoints = (text: string, tone: string, targetLength: number): string => {
-  // In a real app, we would use an actual AI model here
+const formatBulletPoints = (sentences: string[], tone: string): string => {
   const tonePrefix = getTonePrefix(tone);
-  
-  // Generate fake bullet points
-  return `${tonePrefix}\n\n• AI summarization tools like QuickSum help users process large amounts of text quickly\n\n• Both extractive and abstractive summarization techniques have unique advantages\n\n• User experience is critical for making advanced NLP accessible to everyday users\n\n• Customizable summary formats allow for different reading preferences and use cases\n\n• Modern AI models can maintain context while significantly reducing text length`;
+  const bullets = sentences.map(s => `• ${s.trim()}`).join("\n\n");
+  return `${tonePrefix}\n\n${bullets}`;
 };
 
-const generateTLDR = (text: string, tone: string, targetLength: number): string => {
-  // In a real app, we would use an actual AI model here
+const formatTLDR = (sentences: string[], tone: string): string => {
   const tonePrefix = getTonePrefix(tone);
-  
-  // Generate fake TLDR
-  return `${tonePrefix} AI-powered text summarization tools make reading more efficient by condensing content while preserving key information. These systems use natural language processing to understand context and generate concise summaries tailored to user preferences.`;
+  // For TLDR, use fewer sentences and join them
+  const shortSummary = sentences.slice(0, Math.min(2, sentences.length)).join(" ");
+  return `${tonePrefix} ${shortSummary}`;
 };
 
 // Helper function to add tone-specific prefixes
@@ -75,13 +136,31 @@ const getTonePrefix = (tone: string): string => {
   }
 };
 
+// Extract meaningful keywords from text
+const extractKeywords = (text: string): string[] => {
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 4 && !commonStopWords.includes(word));
+  
+  const wordFrequency: Record<string, number> = {};
+  words.forEach(word => {
+    wordFrequency[word] = (wordFrequency[word] || 0) + 1;
+  });
+  
+  // Sort by frequency and take top keywords
+  return Object.keys(wordFrequency)
+    .sort((a, b) => wordFrequency[b] - wordFrequency[a])
+    .slice(0, 8);
+};
+
 export const fakeSummarize = async (
   text: string,
   type: string = "paragraph",
   tone: string = "neutral",
   length: number = 50
 ): Promise<string> => {
-  // Simulate API call delay
+  // Using real summarization instead of fake data
   return new Promise((resolve) => {
     setTimeout(() => {
       const summary = generateSummaryByType(text, type, tone, length);
@@ -91,10 +170,10 @@ export const fakeSummarize = async (
 };
 
 export const fakeKeywordExtraction = async (text: string): Promise<string[]> => {
-  // Simulate API call delay
+  // Using real keyword extraction instead of fake data
   return new Promise((resolve) => {
     setTimeout(() => {
-      const keywords = generateFakeKeywords(text);
+      const keywords = extractKeywords(text);
       resolve(keywords);
     }, getRandomDelay());
   });
