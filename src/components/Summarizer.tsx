@@ -1,7 +1,8 @@
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
@@ -20,22 +21,67 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Copy, ThumbsUp, ThumbsDown } from "lucide-react";
-import { fakeSummarize } from "@/lib/summarize";
+import { Copy, ThumbsUp, ThumbsDown, File, Link, Upload } from "lucide-react";
+import { fakeSummarize, fakeKeywordExtraction } from "@/lib/summarize";
+import { processInputAndSummarize } from "@/lib/fileProcessor";
 import { useToast } from "@/hooks/use-toast";
 
 const Summarizer = () => {
   const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
   const [summaryType, setSummaryType] = useState("paragraph");
   const [tone, setTone] = useState("neutral");
   const [length, setLength] = useState([50]);
   const [summaryResult, setSummaryResult] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [summaryGenerated, setSummaryGenerated] = useState(false);
+  const [activeTab, setActiveTab] = useState("text");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+  };
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUrl(e.target.value);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    toast({
+      title: "File selected",
+      description: `Processing ${file.name}...`,
+    });
+  };
+
   const handleSummarize = async () => {
-    if (text.trim().length < 100) {
+    let inputToProcess: string | File | null = null;
+    
+    // Determine which input to process based on active tab
+    if (activeTab === "text" && text.trim().length > 0) {
+      inputToProcess = text;
+    } else if (activeTab === "url" && url.trim().length > 0) {
+      inputToProcess = url;
+    } else if (activeTab === "file" && fileInputRef.current?.files?.[0]) {
+      inputToProcess = fileInputRef.current.files[0];
+    }
+
+    if (!inputToProcess) {
+      toast({
+        title: "Input required",
+        description: "Please provide text, a URL, or upload a file to summarize.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (typeof inputToProcess === "string" && 
+        inputToProcess.trim().length < 100 && 
+        !inputToProcess.startsWith("http")) {
       toast({
         title: "Text too short",
         description: "Please enter at least 100 characters for a good summary.",
@@ -46,10 +92,22 @@ const Summarizer = () => {
 
     setIsLoading(true);
     try {
-      const result = await fakeSummarize(text, summaryType, tone, length[0]);
+      // Process the input and get summary
+      const result = await processInputAndSummarize(inputToProcess, summaryType, tone, length[0]);
       setSummaryResult(result);
+      
+      // Get keywords if input is text
+      if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
+        const extractedKeywords = await fakeKeywordExtraction(inputToProcess);
+        setKeywords(extractedKeywords);
+      } else {
+        // For files and URLs, we'll use default keywords for the demo
+        setKeywords(["document", "content", "analysis", "summary", "information", "extraction"]);
+      }
+      
       setSummaryGenerated(true);
     } catch (error) {
+      console.error("Summarization error:", error);
       toast({
         title: "Error",
         description: "Failed to generate summary. Please try again.",
@@ -75,6 +133,10 @@ const Summarizer = () => {
     });
   };
 
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div id="summarizer-section" className="container py-12 animate-fade-in">
       <div className="max-w-4xl mx-auto">
@@ -82,22 +144,63 @@ const Summarizer = () => {
         
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Input Text</CardTitle>
+            <CardTitle>Input Content</CardTitle>
             <CardDescription>
-              Paste your text below or 
-              <Button variant="link" className="px-1 py-0 h-auto font-normal">
-                upload a file
-              </Button>
+              Paste text, enter a URL, or upload a document
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Textarea
-              placeholder="Paste your long text here..."
-              className="min-h-40 mb-4 resize-none"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+              <TabsList className="grid grid-cols-3 mb-4">
+                <TabsTrigger value="text" className="flex items-center gap-2">
+                  <File className="w-4 h-4" />
+                  Text
+                </TabsTrigger>
+                <TabsTrigger value="url" className="flex items-center gap-2">
+                  <Link className="w-4 h-4" />
+                  URL
+                </TabsTrigger>
+                <TabsTrigger value="file" className="flex items-center gap-2">
+                  <Upload className="w-4 h-4" />
+                  Upload
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="text" className="mt-0">
+                <Textarea
+                  placeholder="Paste your long text here..."
+                  className="min-h-40 resize-none"
+                  value={text}
+                  onChange={handleTextChange}
+                />
+              </TabsContent>
+              
+              <TabsContent value="url" className="mt-0">
+                <Input 
+                  type="url"
+                  placeholder="Enter a URL (e.g., https://example.com/article)"
+                  value={url}
+                  onChange={handleUrlChange}
+                />
+              </TabsContent>
+              
+              <TabsContent value="file" className="mt-0">
+                <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-primary/50 transition-colors" onClick={triggerFileUpload}>
+                  <Upload className="h-10 w-10 text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600 mb-1">Click to upload or drag and drop</p>
+                  <p className="text-xs text-gray-400">Support for PDF, DOC, DOCX, TXT files</p>
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    className="hidden" 
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={handleFileUpload}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
               <div>
                 <label className="text-sm font-medium block mb-2">Summary Type</label>
                 <Select onValueChange={setSummaryType} defaultValue={summaryType}>
@@ -142,7 +245,7 @@ const Summarizer = () => {
             <Button 
               onClick={handleSummarize} 
               className="w-full"
-              disabled={isLoading || text.length < 10}
+              disabled={isLoading}
             >
               {isLoading ? "Summarizing..." : "Generate Summary"}
             </Button>
@@ -175,7 +278,7 @@ const Summarizer = () => {
               </TabsContent>
               <TabsContent value="keywords" className="p-6 pt-4">
                 <div className="flex flex-wrap gap-2">
-                  {["artificial intelligence", "summarization", "NLP", "user experience", "content", "accessibility"].map((keyword) => (
+                  {keywords.map((keyword) => (
                     <Badge key={keyword} variant="secondary" className="px-3 py-1">
                       {keyword}
                     </Badge>
