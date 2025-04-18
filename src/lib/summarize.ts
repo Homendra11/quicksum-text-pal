@@ -84,12 +84,22 @@ const commonStopWords = [
 
 // Function to generate different summary types
 const generateSummaryByType = (text: string, type: string, tone: string, length: number): string => {
+  // Ensure we have valid input
+  if (!text || text.trim().length < 50) {
+    return "The provided text is too short for meaningful summarization.";
+  }
+  
   // Determine how many sentences to include based on the requested length
   const textWordCount = text.split(/\s+/).length;
-  const sentenceCount = Math.max(2, Math.min(10, Math.floor(textWordCount * (length / 100) / 25)));
+  const sentenceCount = Math.max(2, Math.min(10, Math.floor(textWordCount * (length / 100) / 15)));
   
   // Extract key sentences
   const keySentences = extractKeyPhrases(text, sentenceCount);
+  
+  // If no sentences extracted, return a fallback message
+  if (!keySentences.length) {
+    return "Unable to generate a meaningful summary from the provided text.";
+  }
   
   // Create a summary based on type
   switch (type) {
@@ -154,17 +164,22 @@ const extractKeywords = (text: string): string[] => {
     .slice(0, 8);
 };
 
+// The main summarization function that will be used by the app
 export const fakeSummarize = async (
   text: string,
   type: string = "paragraph",
   tone: string = "neutral",
   length: number = 50
 ): Promise<string> => {
-  // Using real summarization instead of fake data
   return new Promise((resolve) => {
     setTimeout(() => {
-      const summary = generateSummaryByType(text, type, tone, length);
-      resolve(summary);
+      try {
+        const summary = generateSummaryByType(text, type, tone, length);
+        resolve(summary);
+      } catch (error) {
+        console.error("Error during summarization:", error);
+        resolve("An error occurred during summarization. Please try again with different text.");
+      }
     }, getRandomDelay());
   });
 };
@@ -173,8 +188,13 @@ export const fakeKeywordExtraction = async (text: string): Promise<string[]> => 
   // Using real keyword extraction instead of fake data
   return new Promise((resolve) => {
     setTimeout(() => {
-      const keywords = extractKeywords(text);
-      resolve(keywords);
+      try {
+        const keywords = extractKeywords(text);
+        resolve(keywords.length > 0 ? keywords : ["no", "keywords", "found"]);
+      } catch (error) {
+        console.error("Error during keyword extraction:", error);
+        resolve(["error", "extraction", "failed"]);
+      }
     }, getRandomDelay());
   });
 };
