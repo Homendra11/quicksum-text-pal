@@ -134,7 +134,7 @@ const DocumentChat = () => {
               {sampleQuestions.map((q, i) => (
                 <Button
                   key={i}
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                   className="text-xs px-2"
                   onClick={() => setInput(q)}
@@ -190,3 +190,4 @@ const DocumentChat = () => {
 };
 
 export default DocumentChat;
+
