@@ -36,6 +36,48 @@ export type Database = {
         }
         Relationships: []
       }
+      summaries: {
+        Row: {
+          created_at: string | null
+          file_name: string | null
+          id: string
+          input_raw: string | null
+          keywords: string[] | null
+          summary_input_type: string | null
+          summary_length: number | null
+          summary_result: string | null
+          summary_tone: string | null
+          summary_type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_name?: string | null
+          id?: string
+          input_raw?: string | null
+          keywords?: string[] | null
+          summary_input_type?: string | null
+          summary_length?: number | null
+          summary_result?: string | null
+          summary_tone?: string | null
+          summary_type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string | null
+          id?: string
+          input_raw?: string | null
+          keywords?: string[] | null
+          summary_input_type?: string | null
+          summary_length?: number | null
+          summary_result?: string | null
+          summary_tone?: string | null
+          summary_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

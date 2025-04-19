@@ -31,7 +31,8 @@ const Summarizer = () => {
     const fetchHistory = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data, error } = await supabase
+      // Use `any` to bypass type error for "summaries" table
+      const { data, error } = await (supabase as any)
         .from("summaries")
         .select("*")
         .eq("user_id", user.id)
@@ -106,7 +107,7 @@ const Summarizer = () => {
       // Save to Supabase history table
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from("summaries").insert({
+        await (supabase as any).from("summaries").insert({
           user_id: user.id,
           summary_input_type: inputType,
           input_raw: typeof inputToProcess === "string" ? inputToProcess : "",
