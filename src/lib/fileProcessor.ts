@@ -1,4 +1,3 @@
-
 import { fakeSummarize } from "./summarize";
 
 // Function to extract text from PDF files
@@ -197,5 +196,37 @@ export const processInputAndSummarize = async (
   } catch (error) {
     console.error("Error processing input:", error);
     return "Failed to process the input. Please try again with a different text, file, or URL.";
+  }
+
+      let summaryKeywords: string[] = [];
+      if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
+        // Enhanced: Key phrase extraction instead of simple word frequency
+        const phraseCounts: Record<string, number> = {};
+        const matches = inputToProcess
+          .toLowerCase()
+          .replace(/[^\w\s]/g, " ")
+          .match(/\b\w+\b(?:\s+\w+){0,2}/g); // 1- to 3-grams
+
+        if (matches) {
+          matches.forEach(phrase => {
+            const normalized = phrase.replace(/\s+/g, " ").trim();
+            if (normalized.length > 4) {
+              phraseCounts[normalized] = (phraseCounts[normalized] || 0) + 1;
+            }
+          });
+        }
+
+        const extractedKeywords = Object.entries(phraseCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(entry => entry[0]);
+
+        summaryKeywords = extractedKeywords.length > 0
+          ? extractedKeywords
+          : ["document", "content", "summary"];
+      } else {
+        summaryKeywords = ["document", "content", "analysis", "summary", "information", "extraction"];
+      }
+      setKeywords(summaryKeywords);
   }
 };

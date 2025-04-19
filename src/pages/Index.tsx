@@ -9,6 +9,13 @@ import DocumentChat from "@/components/DocumentChat";
 
 const Index = () => {
   const [showDocChat, setShowDocChat] = useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setShowDocChat(true);
+    window.addEventListener("showDocChat", handler);
+    return () => window.removeEventListener("showDocChat", handler);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />

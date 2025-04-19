@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,25 @@ const DocumentChat = () => {
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // Handle file upload and extract text
+  const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    setFileName(file.name);
+    setDocText("");
+    toast({ title: "File dropped", description: "Extracting content..." });
+    try {
+      const text = await processFile(file);
+      setDocText(text);
+      toast({ title: "Ready!", description: "Document content extracted." });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to extract document text.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const onFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -42,13 +59,11 @@ const DocumentChat = () => {
     }
   };
 
-  // Handle pasted text
   const onTextPaste = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDocText(e.target.value);
     setFileName("");
   };
 
-  // Handle user message submission
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const question = input.trim();
@@ -103,7 +118,11 @@ const DocumentChat = () => {
           <CardTitle>Chat with Your Document</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-4">
+          <div 
+            className="flex flex-col gap-4"
+            onDragOver={e => e.preventDefault()}
+            onDrop={onDrop}
+          >
             <div className="flex items-center gap-3 mb-3">
               <Button
                 variant="outline"
@@ -144,6 +163,9 @@ const DocumentChat = () => {
                   {q}
                 </Button>
               ))}
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">
+              <span>Tip: You can also drag and drop PDF, DOC, or TXT files above.</span>
             </div>
           </div>
           {docText && (
@@ -190,4 +212,3 @@ const DocumentChat = () => {
 };
 
 export default DocumentChat;
-

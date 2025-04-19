@@ -160,6 +160,21 @@ const Summarizer = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* NEW: Add "Try Chat with Document" here */}
+            <div className="flex justify-end mb-4">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // redirect to document chat mode (for now, emit custom event for Index; alternatively use context/router)
+                  const evt = new CustomEvent("showDocChat", {});
+                  window.dispatchEvent(evt);
+                }}
+              >
+                <Upload className="w-4 h-4 mr-1" />
+                Try Chat with Document
+              </Button>
+            </div>
             <InputSection
               activeTab={activeTab}
               text={text}
