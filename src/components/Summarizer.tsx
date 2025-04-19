@@ -2,13 +2,11 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { fakeSummarize, fakeKeywordExtraction } from "@/lib/summarize";
 import { processInputAndSummarize } from "@/lib/fileProcessor";
 import { useToast } from "@/hooks/use-toast";
 import InputSection from "./summarizer/InputSection";
 import ControlSection from "./summarizer/ControlSection";
 import SummaryResult from "./summarizer/SummaryResult";
-import { File, Link } from "lucide-react";
 
 const Summarizer = () => {
   const [text, setText] = useState("");
@@ -21,6 +19,7 @@ const Summarizer = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [summaryGenerated, setSummaryGenerated] = useState(false);
   const [activeTab, setActiveTab] = useState("text");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -34,7 +33,8 @@ const Summarizer = () => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    
+    setSelectedFile(file);
     toast({
       title: "File selected",
       description: `Processing ${file.name}...`,
@@ -48,8 +48,8 @@ const Summarizer = () => {
       inputToProcess = text;
     } else if (activeTab === "url" && url.trim().length > 0) {
       inputToProcess = url;
-    } else if (activeTab === "file" && e.target.files?.[0]) {
-      inputToProcess = e.target.files[0];
+    } else if (activeTab === "file" && selectedFile) {
+      inputToProcess = selectedFile;
     }
 
     if (!inputToProcess) {
@@ -66,9 +66,24 @@ const Summarizer = () => {
       const result = await processInputAndSummarize(inputToProcess, summaryType, tone, length[0]);
       setSummaryResult(result);
       
+      // Set sample keywords if we don't have real ones
       if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
-        const extractedKeywords = await fakeKeywordExtraction(inputToProcess);
-        setKeywords(extractedKeywords);
+        // Extract simple keywords from the text
+        const words = inputToProcess.toLowerCase()
+          .replace(/[^\w\s]/g, " ")
+          .split(/\s+/)
+          .filter(word => word.length > 4)
+          .reduce((acc, word) => {
+            acc[word] = (acc[word] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+        const extractedKeywords = Object.entries(words)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(entry => entry[0]);
+          
+        setKeywords(extractedKeywords.length > 0 ? extractedKeywords : ["document", "content", "summary"]);
       } else {
         setKeywords(["document", "content", "analysis", "summary", "information", "extraction"]);
       }

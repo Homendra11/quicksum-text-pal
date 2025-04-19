@@ -3,7 +3,7 @@ import React, { useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Upload } from "lucide-react";
+import { Upload, FileText, LinkIcon } from "lucide-react";
 
 interface InputSectionProps {
   activeTab: string;
@@ -34,11 +34,11 @@ const InputSection = ({
     <Tabs value={activeTab} onValueChange={onTabChange} className="mb-6">
       <TabsList className="grid grid-cols-3 mb-4">
         <TabsTrigger value="text" className="flex items-center gap-2">
-          <File className="w-4 h-4" />
+          <FileText className="w-4 h-4" />
           Text
         </TabsTrigger>
         <TabsTrigger value="url" className="flex items-center gap-2">
-          <Link className="w-4 h-4" />
+          <LinkIcon className="w-4 h-4" />
           URL
         </TabsTrigger>
         <TabsTrigger value="file" className="flex items-center gap-2">
