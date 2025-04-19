@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { processInputAndSummarize } from "@/lib/fileProcessor";
@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import InputSection from "./summarizer/InputSection";
 import ControlSection from "./summarizer/ControlSection";
 import SummaryResult from "./summarizer/SummaryResult";
+import SummaryHistory from "./summarizer/SummaryHistory";
+import { supabase } from "@/integrations/supabase/client";
 
 const Summarizer = () => {
   const [text, setText] = useState("");
@@ -21,6 +23,23 @@ const Summarizer = () => {
   const [activeTab, setActiveTab] = useState("text");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { toast } = useToast();
+  const [history, setHistory] = useState<any[]>([]);
+  const [fileName, setFileName] = useState<string>("");
+
+  // Fetch summaries for the logged-in user on mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data, error } = await supabase
+        .from("summaries")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (!error && data) setHistory(data);
+    };
+    fetchHistory();
+  }, [summaryGenerated]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
@@ -33,8 +52,8 @@ const Summarizer = () => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     setSelectedFile(file);
+    setFileName(file.name);
     toast({
       title: "File selected",
       description: `Processing ${file.name}...`,
@@ -43,14 +62,11 @@ const Summarizer = () => {
 
   const handleSummarize = async () => {
     let inputToProcess: string | File | null = null;
-    
-    if (activeTab === "text" && text.trim().length > 0) {
-      inputToProcess = text;
-    } else if (activeTab === "url" && url.trim().length > 0) {
-      inputToProcess = url;
-    } else if (activeTab === "file" && selectedFile) {
-      inputToProcess = selectedFile;
-    }
+    let inputType = activeTab;
+
+    if (activeTab === "text" && text.trim().length > 0) inputToProcess = text;
+    else if (activeTab === "url" && url.trim().length > 0) inputToProcess = url;
+    else if (activeTab === "file" && selectedFile) inputToProcess = selectedFile;
 
     if (!inputToProcess) {
       toast({
@@ -65,8 +81,8 @@ const Summarizer = () => {
     try {
       const result = await processInputAndSummarize(inputToProcess, summaryType, tone, length[0]);
       setSummaryResult(result);
-      
-      // Set sample keywords if we don't have real ones
+
+      let summaryKeywords: string[] = [];
       if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
         // Extract simple keywords from the text
         const words = inputToProcess.toLowerCase()
@@ -77,17 +93,32 @@ const Summarizer = () => {
             acc[word] = (acc[word] || 0) + 1;
             return acc;
           }, {} as Record<string, number>);
-          
         const extractedKeywords = Object.entries(words)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 8)
           .map(entry => entry[0]);
-          
-        setKeywords(extractedKeywords.length > 0 ? extractedKeywords : ["document", "content", "summary"]);
+        summaryKeywords = extractedKeywords.length > 0 ? extractedKeywords : ["document", "content", "summary"];
       } else {
-        setKeywords(["document", "content", "analysis", "summary", "information", "extraction"]);
+        summaryKeywords = ["document", "content", "analysis", "summary", "information", "extraction"];
       }
-      
+      setKeywords(summaryKeywords);
+
+      // Save to Supabase history table
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("summaries").insert({
+          user_id: user.id,
+          summary_input_type: inputType,
+          input_raw: typeof inputToProcess === "string" ? inputToProcess : "",
+          file_name: typeof inputToProcess !== "string" && inputToProcess.name ? inputToProcess.name : fileName,
+          summary_result: result,
+          summary_type: summaryType,
+          summary_tone: tone,
+          summary_length: length[0],
+          keywords: summaryKeywords,
+        });
+      }
+
       setSummaryGenerated(true);
     } catch (error) {
       console.error("Summarization error:", error);
@@ -120,7 +151,6 @@ const Summarizer = () => {
     <div id="summarizer-section" className="container py-12 animate-fade-in">
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl font-bold mb-8 text-center">Summarize Your Text</h2>
-        
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Input Content</CardTitle>
@@ -137,6 +167,7 @@ const Summarizer = () => {
               onUrlChange={handleUrlChange}
               onFileUpload={handleFileUpload}
               onTabChange={setActiveTab}
+              fileName={fileName}
             />
             <ControlSection
               summaryType={summaryType}
@@ -148,8 +179,8 @@ const Summarizer = () => {
             />
           </CardContent>
           <CardFooter>
-            <Button 
-              onClick={handleSummarize} 
+            <Button
+              onClick={handleSummarize}
               className="w-full"
               disabled={isLoading}
             >
@@ -169,6 +200,11 @@ const Summarizer = () => {
             onRate={rateSummary}
           />
         )}
+
+        {/* History Section */}
+        <div className="mt-10">
+          <SummaryHistory history={history} />
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ interface InputSectionProps {
   onUrlChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onTabChange: (value: string) => void;
+  fileName?: string;
 }
 
 const InputSection = ({
@@ -23,6 +24,7 @@ const InputSection = ({
   onUrlChange,
   onFileUpload,
   onTabChange,
+  fileName = "",
 }: InputSectionProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +86,11 @@ const InputSection = ({
             accept=".pdf,.doc,.docx,.txt"
             onChange={onFileUpload}
           />
+          {fileName && (
+            <p className="mt-3 text-primary font-medium text-sm truncate max-w-xs">
+              Uploaded: {fileName}
+            </p>
+          )}
         </div>
       </TabsContent>
     </Tabs>
