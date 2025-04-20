@@ -18,6 +18,32 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Start: Feedback Section -->
+    <div style="max-width:600px;margin:36px auto 25px auto;padding:0 20px;">
+      <div style="
+        display:flex;
+        gap:24px;
+        background:#fff;
+        border-radius:10px;
+        box-shadow:0 1px 10px rgba(40,54,120,0.06);
+        padding:20px 24px 20px 20px;
+        align-items:center;
+      ">
+        <img src="public/lovable-uploads/b0e9d1e5-81b3-4a46-8bac-6d03e51c7bb4.png" alt="Feedback" style="width:112px;height:112px;object-fit:cover;border-radius:10px;border:2px solid #eee;box-shadow:0 1px 8px #efefef;" />
+        <form id="feedbackForm" style="flex:1;">
+          <div style="font-size:19px;font-weight:600;margin-bottom:4px;color:#1a1f2c;">Share your feedback</div>
+          <div style="font-size:14px;color:#555;margin-bottom:10px;">Tell us about your summarization experience!</div>
+          <textarea id="feedbackText" rows="2" placeholder="Write your feedback..." style="width:100%;border-radius:6px;border:1px solid #ccc;padding:7px 9px;font-size:14px;margin-bottom:8px;resize:vertical;"></textarea>
+          <div>
+            <button type="submit" style="background:#9b87f5;color:#fff;font-weight:500;padding:7px 20px;border:none;border-radius:4px;cursor:pointer;">Send Feedback</button>
+            <span id="feedbackStatus" style="margin-left:14px;font-size:13px;color:#3587fe;font-weight:500;display:none;"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+    <!-- End: Feedback Section -->
+
     <!-- Start: Enhanced Summarizer UI -->
     <div style="max-width:600px;margin:40px auto;padding:20px;border:1px solid #eee;border-radius:8px;background:#fafcff;">
       <textarea id="inputText" placeholder="Enter text here..." rows="8" cols="60" style="width:100%;padding:10px;border-radius:4px;border:1px solid #ccc;display:block;"></textarea>
@@ -31,12 +57,62 @@
     </div>
     <!-- End: Enhanced Summarizer UI -->
 
+    <!-- Start: Footer With Image -->
+    <div style="max-width:100vw;margin:0 auto;padding:0;">
+      <div style="
+        width:100%;max-width:1240px;margin:0 auto 0 auto;height:100px;overflow:hidden;
+        border-radius:0 0 12px 12px;
+        display:flex;align-items:end;
+        background:url('public/lovable-uploads/0bc1d181-3669-4d75-882d-ecb3d8da0556.png') no-repeat left center #fff;
+        background-size:auto 85px;
+        border:1px solid #eee;
+        border-top:none;
+        box-shadow:0 3px 10px #00000008
+      "></div>
+      <footer style="max-width:1240px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;padding:2px 30px 10px 30px;font-size:16px;color:#888;">
+        <div>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <img src="public/lovable-uploads/0bc1d181-3669-4d75-882d-ecb3d8da0556.png" alt="QuickSum Footer" style="height:20px;width:20px;border-radius:3px;object-fit:cover;box-shadow:0 1px 2px #eee;" />
+            <span style="font-weight:bold;color:#221F26;">QuickSum</span>
+          </span>
+        </div>
+        <nav style="display:flex;gap:26px;">
+          <a href="#" style="color:#888;text-decoration:none;">About</a>
+          <a href="#" style="color:#888;text-decoration:none;">Features</a>
+          <a href="#" style="color:#888;text-decoration:none;">Pricing</a>
+          <a href="#" style="color:#888;text-decoration:none;">Blog</a>
+          <a href="#" style="color:#888;text-decoration:none;">Contact</a>
+        </nav>
+      </footer>
+    </div>
+    <!-- End: Footer With Image -->
+
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
 
-    <!-- Inline JS for Enhanced Summarizer Button -->
+    <!-- Inline JS for Feedback + Summarizer -->
     <script>
+      // Feedback submit logic
+      document.getElementById("feedbackForm").onsubmit = function(e) {
+        e.preventDefault();
+        const text = document.getElementById("feedbackText").value.trim();
+        const status = document.getElementById("feedbackStatus");
+        if (text.length < 3) {
+          status.innerText = "Please enter feedback before sending.";
+          status.style.color = "#ea384c";
+          status.style.display = "inline";
+          return;
+        }
+        // For demo: just show success state
+        status.innerText = "Thanks for your feedback!";
+        status.style.color = "#13b07d";
+        status.style.display = "inline";
+        document.getElementById("feedbackText").value = "";
+        setTimeout(() => status.style.display = "none", 3100);
+      };
+
+      // Summarizer logic
       async function extractTextFromPDF(file) {
         return new Promise((resolve) => {
           const reader = new FileReader();
