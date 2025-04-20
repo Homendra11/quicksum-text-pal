@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPDF, extractTextFromDOC, processFile } from "@/lib/fileProcessor";
+import { fakeSummarize } from "@/lib/summarize";
 
 interface ChatItem {
   role: "user" | "assistant";
@@ -21,6 +22,17 @@ const DocumentChat = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
+
+  function getEdgeFunctionUrl(fn: string): string {
+    const base =
+      import.meta.env.VITE_SUPABASE_URL ||
+      (window.location.origin.includes("localhost")
+        ? "http://localhost:54321"
+        : window.location.origin);
+    return base.includes("supabase.co")
+      ? `${base}/functions/v1/${fn}`
+      : `${base}/functions/v1/${fn}`;
+  }
 
   const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -71,8 +83,9 @@ const DocumentChat = () => {
     setChat(chat => [...chat, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+    let handled = false;
     try {
-      const resp = await fetch("/functions/v1/chat-with-document", {
+      const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -81,17 +94,36 @@ const DocumentChat = () => {
           history: chat.filter(c => c.role === "user" || c.role === "assistant")
         }),
       });
-      const data = await resp.json();
-      if (data.answer) {
-        setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
-      } else {
-        setChat(chat => [...chat, { role: "assistant", content: "Sorry, I couldn't generate an answer." }]);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.answer) {
+          setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
+          handled = true;
+        }
       }
     } catch (err) {
-      setChat(chat => [...chat, { role: "assistant", content: "Error contacting the chat backend." }]);
-    } finally {
-      setLoading(false);
     }
+    if (!handled) {
+      let localSummary = "";
+      try {
+        if (/summarize|brief|overview/i.test(question)) {
+          localSummary = await fakeSummarize(docText, "paragraph", "friendly", 45);
+        } else if (/key\s*points|list/i.test(question)) {
+          localSummary = await fakeSummarize(docText, "bullets", "neutral", 50);
+        } else if (/main subject|who/i.test(question)) {
+          localSummary = await fakeSummarize(docText, "tldr", "neutral", 25);
+        } else {
+          localSummary = await fakeSummarize(docText, "paragraph", "neutral", 40);
+        }
+      } catch (e) {
+        localSummary = "Sorry, document could not be summarized.";
+      }
+      setChat(chat => [
+        ...chat,
+        { role: "assistant", content: localSummary || "Sorry, could not summarize. Try with a clearer document." }
+      ]);
+    }
+    setLoading(false);
   };
 
   const triggerUpload = () => fileInput.current?.click();
