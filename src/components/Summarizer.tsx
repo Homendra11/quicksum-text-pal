@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +8,7 @@ import ControlSection from "./summarizer/ControlSection";
 import SummaryResult from "./summarizer/SummaryResult";
 import SummaryHistory from "./summarizer/SummaryHistory";
 import { supabase } from "@/integrations/supabase/client";
+import { Upload } from "lucide-react";
 
 const Summarizer = () => {
   const [text, setText] = useState("");
@@ -26,12 +26,10 @@ const Summarizer = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [fileName, setFileName] = useState<string>("");
 
-  // Fetch summaries for the logged-in user on mount
   useEffect(() => {
     const fetchHistory = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      // Use `any` to bypass type error for "summaries" table
       const { data, error } = await (supabase as any)
         .from("summaries")
         .select("*")
@@ -85,26 +83,34 @@ const Summarizer = () => {
 
       let summaryKeywords: string[] = [];
       if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
-        // Extract simple keywords from the text
-        const words = inputToProcess.toLowerCase()
+        const phraseCounts: Record<string, number> = {};
+        const matches = inputToProcess
+          .toLowerCase()
           .replace(/[^\w\s]/g, " ")
-          .split(/\s+/)
-          .filter(word => word.length > 4)
-          .reduce((acc, word) => {
-            acc[word] = (acc[word] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-        const extractedKeywords = Object.entries(words)
+          .match(/\b\w+\b(?:\s+\w+){0,2}/g);
+
+        if (matches) {
+          matches.forEach(phrase => {
+            const normalized = phrase.replace(/\s+/g, " ").trim();
+            if (normalized.length > 4) {
+              phraseCounts[normalized] = (phraseCounts[normalized] || 0) + 1;
+            }
+          });
+        }
+
+        const extractedKeywords = Object.entries(phraseCounts)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 8)
           .map(entry => entry[0]);
-        summaryKeywords = extractedKeywords.length > 0 ? extractedKeywords : ["document", "content", "summary"];
+
+        summaryKeywords = extractedKeywords.length > 0
+          ? extractedKeywords
+          : ["document", "content", "summary"];
       } else {
         summaryKeywords = ["document", "content", "analysis", "summary", "information", "extraction"];
       }
       setKeywords(summaryKeywords);
 
-      // Save to Supabase history table
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await (supabase as any).from("summaries").insert({
@@ -160,13 +166,11 @@ const Summarizer = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* NEW: Add "Try Chat with Document" here */}
             <div className="flex justify-end mb-4">
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={() => {
-                  // redirect to document chat mode (for now, emit custom event for Index; alternatively use context/router)
                   const evt = new CustomEvent("showDocChat", {});
                   window.dispatchEvent(evt);
                 }}
@@ -217,7 +221,6 @@ const Summarizer = () => {
           />
         )}
 
-        {/* History Section */}
         <div className="mt-10">
           <SummaryHistory history={history} />
         </div>
