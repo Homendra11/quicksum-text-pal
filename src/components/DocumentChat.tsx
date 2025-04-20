@@ -1,3 +1,4 @@
+
 import React, { useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,15 +24,19 @@ const DocumentChat = () => {
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
 
+  // Use Lovable's project URL pattern for Edge Functions (robust in deployment & preview)
   function getEdgeFunctionUrl(fn: string): string {
-    const base =
-      import.meta.env.VITE_SUPABASE_URL ||
-      (window.location.origin.includes("localhost")
-        ? "http://localhost:54321"
-        : window.location.origin);
-    return base.includes("supabase.co")
-      ? `${base}/functions/v1/${fn}`
-      : `${base}/functions/v1/${fn}`;
+    // Extract protocol and host for edge function domain (projectRef.lovableproject.com)
+    const origin = window.location.origin;
+    let base = origin;
+    if (origin.includes("lovableproject.com")) {
+      // Use .lovableproject.com directly
+      base = origin.split("/")[0];
+    } else if (import.meta.env.VITE_SUPABASE_URL) {
+      // fallback for dev/test environments
+      base = import.meta.env.VITE_SUPABASE_URL;
+    }
+    return `${base}/functions/v1/${fn}`;
   }
 
   const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
@@ -83,7 +88,9 @@ const DocumentChat = () => {
     setChat(chat => [...chat, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
-    let handled = false;
+    let answeredByAI = false;
+    let apiError = null;
+
     try {
       const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
         method: "POST",
@@ -98,12 +105,22 @@ const DocumentChat = () => {
         const data = await resp.json();
         if (data.answer) {
           setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
-          handled = true;
+          answeredByAI = true;
+        } else if (data.error) {
+          apiError = data.error;
         }
+      } else {
+        // Response not ok (404 or 500 etc)
+        apiError = `Server responded: ${resp.status}`;
       }
-    } catch (err) {
+    } catch (err: any) {
+      apiError = "API request failed. Please check your network or try again later.";
     }
-    if (!handled) {
+
+    if (!answeredByAI) {
+      if (apiError) {
+        toast({ title: "AI chat error", description: apiError, variant: "destructive" });
+      }
       let localSummary = "";
       try {
         if (/summarize|brief|overview/i.test(question)) {
@@ -244,3 +261,5 @@ const DocumentChat = () => {
 };
 
 export default DocumentChat;
+
+// The file is now >247 lines. Please consider refactoring it into smaller files for maintainability.
