@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,25 @@ interface ChatItem {
   content: string;
 }
 
+function chunkDocument(text: string, maxChunkSize = 3000) {
+  const chunks = [];
+  let i = 0;
+  while (i < text.length) {
+    chunks.push(text.slice(i, i + maxChunkSize));
+    i += maxChunkSize;
+  }
+  return chunks;
+}
+
+function findRelevantChunks(docText: string, question: string) {
+  const chunks = chunkDocument(docText);
+  if (chunks.length <= 4) return chunks;
+  const questionWords = question.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+  return chunks.filter(chunk => 
+    questionWords.some(token => chunk.toLowerCase().includes(token))
+  ).slice(0, 4) || chunks.slice(0, 2);
+}
+
 const DocumentChat = () => {
   const [docText, setDocText] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
@@ -21,19 +39,16 @@ const DocumentChat = () => {
   const [input, setInput] = useState("");
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [regenIndex, setRegenIndex] = useState<number | null>(null);
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // Use Lovable's project URL pattern for Edge Functions (robust in deployment & preview)
   function getEdgeFunctionUrl(fn: string): string {
-    // Extract protocol and host for edge function domain (projectRef.lovableproject.com)
     const origin = window.location.origin;
     let base = origin;
     if (origin.includes("lovableproject.com")) {
-      // Use .lovableproject.com directly
       base = origin.split("/")[0];
     } else if (import.meta.env.VITE_SUPABASE_URL) {
-      // fallback for dev/test environments
       base = import.meta.env.VITE_SUPABASE_URL;
     }
     return `${base}/functions/v1/${fn}`;
@@ -92,12 +107,13 @@ const DocumentChat = () => {
     let apiError = null;
 
     try {
+      let contextChunks = docText.length > 3500 ? findRelevantChunks(docText, question).join("\n---\n") : docText;
       const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question,
-          docText,
+          docText: contextChunks,
           history: chat.filter(c => c.role === "user" || c.role === "assistant")
         }),
       });
@@ -110,11 +126,10 @@ const DocumentChat = () => {
           apiError = data.error;
         }
       } else {
-        // Response not ok (404 or 500 etc)
         apiError = `Server responded: ${resp.status}`;
       }
     } catch (err: any) {
-      apiError = "API request failed. Please check your network or try again later.";
+      apiError = "API request failed. Check your API Key in Supabase secrets.";
     }
 
     if (!answeredByAI) {
@@ -159,6 +174,51 @@ const DocumentChat = () => {
   React.useEffect(() => {
     chatAreaRef.current?.scrollTo({ top: chatAreaRef.current.scrollHeight, behavior: "smooth" });
   }, [chat.length]);
+
+  const onRegenerate = async (index: number) => {
+    const lastUserIndex = chat.slice(0, index+1).reverse().findIndex(item => item.role === "user");
+    if (lastUserIndex < 0) return;
+    setRegenIndex(index);
+    setLoading(true);
+    let answeredByAI = false;
+    let apiError = null;
+    const qIndex = index - lastUserIndex;
+    const question = chat[qIndex]?.content || "";
+    try {
+      let contextChunks = docText.length > 3500 ? findRelevantChunks(docText, question).join("\n---\n") : docText;
+      const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          docText: contextChunks,
+          history: chat.slice(0, qIndex).filter(c => c.role === "user" || c.role === "assistant"),
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.answer) {
+          setChat(old =>
+            old.map((item, idx) =>
+              idx === index ? { role: "assistant", content: data.answer } : item
+            )
+          );
+          answeredByAI = true;
+        } else if (data.error) {
+          apiError = data.error;
+        }
+      } else {
+        apiError = `Server responded: ${resp.status}`;
+      }
+    } catch (err: any) {
+      apiError = "API request failed. Check your API Key in Supabase secrets.";
+    }
+    setRegenIndex(null);
+    setLoading(false);
+    if (!answeredByAI && apiError) {
+      toast({ title: "AI chat error", description: apiError, variant: "destructive" });
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto py-8">
@@ -235,6 +295,18 @@ const DocumentChat = () => {
                   >
                     {item.content}
                   </span>
+                  {item.role === "assistant" && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="ml-2 text-[10px] px-1 py-0.5"
+                      disabled={regenIndex === i || loading}
+                      onClick={() => onRegenerate(i)}
+                      title="Regenerate answer"
+                    >
+                      {regenIndex === i ? "Regenerating..." : "↻"}
+                    </Button>
+                  )}
                 </div>
               ))}
               {loading && (
@@ -256,10 +328,18 @@ const DocumentChat = () => {
           </CardFooter>
         </form>
       </Card>
+      <div className="mt-3 text-xs text-gray-500">
+        {docText.length > 9500 && (
+          <div className="text-red-500">
+            Warning: Document is very large. Only key sections will be used to answer!
+          </div>
+        )}
+        <div className="mt-1">
+          If you keep getting errors, ensure your <b>OpenAI API key</b> is set in Supabase (Project Settings → Secrets → <code>OPENAI_API_KEY</code>).
+        </div>
+      </div>
     </div>
   );
 };
 
 export default DocumentChat;
-
-// The file is now >247 lines. Please consider refactoring it into smaller files for maintainability.
