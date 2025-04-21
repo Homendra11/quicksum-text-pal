@@ -297,7 +297,7 @@ const DocumentChat = () => {
                   </span>
                   {item.role === "assistant" && (
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="ghost"
                       className="ml-2 text-[10px] px-1 py-0.5"
                       disabled={regenIndex === i || loading}
