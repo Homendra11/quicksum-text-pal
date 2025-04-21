@@ -6,30 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPDF, extractTextFromDOC, processFile } from "@/lib/fileProcessor";
-import { fakeSummarize } from "@/lib/summarize";
 
 interface ChatItem {
   role: "user" | "assistant";
   content: string;
-}
-
-function chunkDocument(text: string, maxChunkSize = 3000) {
-  const chunks = [];
-  let i = 0;
-  while (i < text.length) {
-    chunks.push(text.slice(i, i + maxChunkSize));
-    i += maxChunkSize;
-  }
-  return chunks;
-}
-
-function findRelevantChunks(docText: string, question: string) {
-  const chunks = chunkDocument(docText);
-  if (chunks.length <= 4) return chunks;
-  const questionWords = question.toLowerCase().split(/\W+/).filter(w => w.length > 3);
-  return chunks.filter(chunk => 
-    questionWords.some(token => chunk.toLowerCase().includes(token))
-  ).slice(0, 4) || chunks.slice(0, 2);
 }
 
 const DocumentChat = () => {
@@ -39,20 +19,8 @@ const DocumentChat = () => {
   const [input, setInput] = useState("");
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [regenIndex, setRegenIndex] = useState<number | null>(null);
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
-
-  function getEdgeFunctionUrl(fn: string): string {
-    const origin = window.location.origin;
-    let base = origin;
-    if (origin.includes("lovableproject.com")) {
-      base = origin.split("/")[0];
-    } else if (import.meta.env.VITE_SUPABASE_URL) {
-      base = import.meta.env.VITE_SUPABASE_URL;
-    }
-    return `${base}/functions/v1/${fn}`;
-  }
 
   const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -103,59 +71,27 @@ const DocumentChat = () => {
     setChat(chat => [...chat, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
-    let answeredByAI = false;
-    let apiError = null;
-
     try {
-      let contextChunks = docText.length > 3500 ? findRelevantChunks(docText, question).join("\n---\n") : docText;
-      const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
+      const resp = await fetch("/functions/v1/chat-with-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question,
-          docText: contextChunks,
+          docText,
           history: chat.filter(c => c.role === "user" || c.role === "assistant")
         }),
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.answer) {
-          setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
-          answeredByAI = true;
-        } else if (data.error) {
-          apiError = data.error;
-        }
+      const data = await resp.json();
+      if (data.answer) {
+        setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
       } else {
-        apiError = `Server responded: ${resp.status}`;
+        setChat(chat => [...chat, { role: "assistant", content: "Sorry, I couldn't generate an answer." }]);
       }
-    } catch (err: any) {
-      apiError = "API request failed. Check your API Key in Supabase secrets.";
+    } catch (err) {
+      setChat(chat => [...chat, { role: "assistant", content: "Error contacting the chat backend." }]);
+    } finally {
+      setLoading(false);
     }
-
-    if (!answeredByAI) {
-      if (apiError) {
-        toast({ title: "AI chat error", description: apiError, variant: "destructive" });
-      }
-      let localSummary = "";
-      try {
-        if (/summarize|brief|overview/i.test(question)) {
-          localSummary = await fakeSummarize(docText, "paragraph", "friendly", 45);
-        } else if (/key\s*points|list/i.test(question)) {
-          localSummary = await fakeSummarize(docText, "bullets", "neutral", 50);
-        } else if (/main subject|who/i.test(question)) {
-          localSummary = await fakeSummarize(docText, "tldr", "neutral", 25);
-        } else {
-          localSummary = await fakeSummarize(docText, "paragraph", "neutral", 40);
-        }
-      } catch (e) {
-        localSummary = "Sorry, document could not be summarized.";
-      }
-      setChat(chat => [
-        ...chat,
-        { role: "assistant", content: localSummary || "Sorry, could not summarize. Try with a clearer document." }
-      ]);
-    }
-    setLoading(false);
   };
 
   const triggerUpload = () => fileInput.current?.click();
@@ -174,51 +110,6 @@ const DocumentChat = () => {
   React.useEffect(() => {
     chatAreaRef.current?.scrollTo({ top: chatAreaRef.current.scrollHeight, behavior: "smooth" });
   }, [chat.length]);
-
-  const onRegenerate = async (index: number) => {
-    const lastUserIndex = chat.slice(0, index+1).reverse().findIndex(item => item.role === "user");
-    if (lastUserIndex < 0) return;
-    setRegenIndex(index);
-    setLoading(true);
-    let answeredByAI = false;
-    let apiError = null;
-    const qIndex = index - lastUserIndex;
-    const question = chat[qIndex]?.content || "";
-    try {
-      let contextChunks = docText.length > 3500 ? findRelevantChunks(docText, question).join("\n---\n") : docText;
-      const resp = await fetch(getEdgeFunctionUrl("chat-with-document"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question,
-          docText: contextChunks,
-          history: chat.slice(0, qIndex).filter(c => c.role === "user" || c.role === "assistant"),
-        }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.answer) {
-          setChat(old =>
-            old.map((item, idx) =>
-              idx === index ? { role: "assistant", content: data.answer } : item
-            )
-          );
-          answeredByAI = true;
-        } else if (data.error) {
-          apiError = data.error;
-        }
-      } else {
-        apiError = `Server responded: ${resp.status}`;
-      }
-    } catch (err: any) {
-      apiError = "API request failed. Check your API Key in Supabase secrets.";
-    }
-    setRegenIndex(null);
-    setLoading(false);
-    if (!answeredByAI && apiError) {
-      toast({ title: "AI chat error", description: apiError, variant: "destructive" });
-    }
-  };
 
   return (
     <div className="max-w-2xl mx-auto py-8">
@@ -295,18 +186,6 @@ const DocumentChat = () => {
                   >
                     {item.content}
                   </span>
-                  {item.role === "assistant" && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="ml-2 text-[10px] px-1 py-0.5"
-                      disabled={regenIndex === i || loading}
-                      onClick={() => onRegenerate(i)}
-                      title="Regenerate answer"
-                    >
-                      {regenIndex === i ? "Regenerating..." : "↻"}
-                    </Button>
-                  )}
                 </div>
               ))}
               {loading && (
@@ -328,16 +207,6 @@ const DocumentChat = () => {
           </CardFooter>
         </form>
       </Card>
-      <div className="mt-3 text-xs text-gray-500">
-        {docText.length > 9500 && (
-          <div className="text-red-500">
-            Warning: Document is very large. Only key sections will be used to answer!
-          </div>
-        )}
-        <div className="mt-1">
-          If you keep getting errors, ensure your <b>OpenAI API key</b> is set in Supabase (Project Settings → Secrets → <code>OPENAI_API_KEY</code>).
-        </div>
-      </div>
     </div>
   );
 };
