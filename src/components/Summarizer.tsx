@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { processInputAndSummarize } from "@/lib/fileProcessor";
 import { useToast } from "@/hooks/use-toast";
 import InputSection from "./summarizer/InputSection";
 import ControlSection from "./summarizer/ControlSection";
@@ -9,6 +8,7 @@ import SummaryResult from "./summarizer/SummaryResult";
 import SummaryHistory from "./summarizer/SummaryHistory";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload } from "lucide-react";
+import { useGemini } from "@/hooks/use-gemini";
 
 const Summarizer = () => {
   const [text, setText] = useState("");
@@ -25,6 +25,22 @@ const Summarizer = () => {
   const { toast } = useToast();
   const [history, setHistory] = useState<any[]>([]);
   const [fileName, setFileName] = useState<string>("");
+
+  const { summarize: geminiSummarize, isLoading: geminiLoading } = useGemini({
+    onSummaryStart: () => {
+      setIsLoading(true);
+    },
+    onSummaryComplete: (summary, keywords) => {
+      setSummaryResult(summary);
+      setKeywords(keywords);
+      setSummaryGenerated(true);
+      setIsLoading(false);
+    },
+    onSummaryError: (error) => {
+      setIsLoading(false);
+      console.error("Gemini API error:", error);
+    }
+  });
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -60,14 +76,49 @@ const Summarizer = () => {
   };
 
   const handleSummarize = async () => {
-    let inputToProcess: string | File | null = null;
-    let inputType = activeTab;
+    let inputText = "";
+    
+    if (activeTab === "text" && text.trim().length > 0) {
+      inputText = text;
+    } else if (activeTab === "url" && url.trim().length > 0) {
+      toast({
+        title: "URL Processing",
+        description: "URL content extraction is in progress...",
+      });
+      try {
+        inputText = `Content from URL: ${url}`;
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch URL content.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (activeTab === "file" && selectedFile) {
+      if (selectedFile.type.includes("text")) {
+        try {
+          const text = await selectedFile.text();
+          inputText = text;
+        } catch (error) {
+          toast({
+            title: "Error",
+            description: "Failed to read file content.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } else {
+        toast({
+          title: "Unsupported File",
+          description: "Only text files can be processed directly.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
-    if (activeTab === "text" && text.trim().length > 0) inputToProcess = text;
-    else if (activeTab === "url" && url.trim().length > 0) inputToProcess = url;
-    else if (activeTab === "file" && selectedFile) inputToProcess = selectedFile;
-
-    if (!inputToProcess) {
+    if (!inputText) {
       toast({
         title: "Input required",
         description: "Please provide text, a URL, or upload a file to summarize.",
@@ -76,66 +127,27 @@ const Summarizer = () => {
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const result = await processInputAndSummarize(inputToProcess, summaryType, tone, length[0]);
-      setSummaryResult(result);
-
-      let summaryKeywords: string[] = [];
-      if (typeof inputToProcess === "string" && !inputToProcess.startsWith("http")) {
-        const phraseCounts: Record<string, number> = {};
-        const matches = inputToProcess
-          .toLowerCase()
-          .replace(/[^\w\s]/g, " ")
-          .match(/\b\w+\b(?:\s+\w+){0,2}/g);
-
-        if (matches) {
-          matches.forEach(phrase => {
-            const normalized = phrase.replace(/\s+/g, " ").trim();
-            if (normalized.length > 4) {
-              phraseCounts[normalized] = (phraseCounts[normalized] || 0) + 1;
-            }
+    const result = await geminiSummarize(inputText);
+    
+    if (result) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await (supabase as any).from("summaries").insert({
+            user_id: user.id,
+            summary_input_type: activeTab,
+            input_raw: inputText,
+            file_name: fileName,
+            summary_result: result.summary,
+            summary_type: summaryType,
+            summary_tone: tone,
+            summary_length: length[0],
+            keywords: result.keywords,
           });
         }
-
-        const extractedKeywords = Object.entries(phraseCounts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8)
-          .map(entry => entry[0]);
-
-        summaryKeywords = extractedKeywords.length > 0
-          ? extractedKeywords
-          : ["document", "content", "summary"];
-      } else {
-        summaryKeywords = ["document", "content", "analysis", "summary", "information", "extraction"];
+      } catch (error) {
+        console.error("Error saving to history:", error);
       }
-      setKeywords(summaryKeywords);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await (supabase as any).from("summaries").insert({
-          user_id: user.id,
-          summary_input_type: inputType,
-          input_raw: typeof inputToProcess === "string" ? inputToProcess : "",
-          file_name: typeof inputToProcess !== "string" && inputToProcess.name ? inputToProcess.name : fileName,
-          summary_result: result,
-          summary_type: summaryType,
-          summary_tone: tone,
-          summary_length: length[0],
-          keywords: summaryKeywords,
-        });
-      }
-
-      setSummaryGenerated(true);
-    } catch (error) {
-      console.error("Summarization error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to generate summary. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -202,7 +214,7 @@ const Summarizer = () => {
             <Button
               onClick={handleSummarize}
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || geminiLoading}
             >
               {isLoading ? "Summarizing..." : "Generate Summary"}
             </Button>

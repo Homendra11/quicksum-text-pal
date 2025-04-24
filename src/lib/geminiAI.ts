@@ -67,10 +67,17 @@ export const summarizeWithGemini = async (
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error("Gemini API error response:", errorText);
       throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts) {
+      console.error("Unexpected Gemini API response structure:", JSON.stringify(data));
+      throw new Error("Invalid response format from Gemini API");
+    }
+    
     const responseText = data.candidates[0].content.parts[0].text;
     
     try {
@@ -79,6 +86,7 @@ export const summarizeWithGemini = async (
       const jsonString = jsonMatch ? jsonMatch[0] : null;
       
       if (!jsonString) {
+        console.error("Could not extract JSON from response:", responseText);
         throw new Error("Could not extract JSON from response");
       }
       
@@ -89,7 +97,7 @@ export const summarizeWithGemini = async (
         keywords: parsedResponse.keywords || []
       };
     } catch (parseError) {
-      console.error("Failed to parse Gemini response:", parseError);
+      console.error("Failed to parse Gemini response:", parseError, "Response text:", responseText);
       return {
         summary: responseText,
         keywords: []
