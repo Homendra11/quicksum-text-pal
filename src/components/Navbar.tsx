@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { FileText, Settings, User } from "lucide-react";
+import { Home, Settings, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AuthDialog from "@/components/auth/AuthDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
+import { Link } from "react-router-dom";
 
 const Navbar = () => {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
@@ -50,10 +50,13 @@ const Navbar = () => {
   return (
     <nav className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-6 w-6 text-primary" />
-          <span className="font-bold text-xl">QuickSum</span>
-        </div>
+        <Link 
+          to="/"
+          className="flex items-center gap-2 transition-transform hover:scale-105 duration-300 ease-out"
+        >
+          <Home className="h-6 w-6 text-primary animate-fade-in" />
+          <span className="font-bold text-xl animate-fade-in">QuickSum</span>
+        </Link>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon">
             <Settings className="h-5 w-5" />
