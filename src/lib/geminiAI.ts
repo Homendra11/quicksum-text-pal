@@ -40,7 +40,8 @@ export const summarizeWithGemini = async (
       ${text}
     `;
     
-    const response = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent', {
+    // Updated API endpoint to use the correct version and model name
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
