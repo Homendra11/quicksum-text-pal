@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home, Settings, User } from "lucide-react";
+import { Home, Settings, User, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AuthDialog from "@/components/auth/AuthDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,10 +12,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { useTheme } from "@/hooks/use-theme";
 
 const Navbar = () => {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -58,9 +60,28 @@ const Navbar = () => {
           <span className="font-bold text-xl animate-fade-in">QuickSum</span>
         </Link>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <Settings className="h-5 w-5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? (
+                  <div className="flex items-center gap-2">
+                    <Sun className="h-4 w-4" />
+                    <span>Light Mode</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-4 w-4" />
+                    <span>Dark Mode</span>
+                  </div>
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {session ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
