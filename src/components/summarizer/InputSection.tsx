@@ -1,5 +1,5 @@
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -27,9 +27,40 @@ const InputSection = ({
   fileName = "",
 }: InputSectionProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // Create a synthetic event to pass to onFileUpload
+      const fileInputEvent = {
+        target: {
+          files: e.dataTransfer.files
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      
+      onFileUpload(fileInputEvent);
+      onTabChange('file');
+    }
   };
 
   return (
@@ -69,12 +100,17 @@ const InputSection = ({
 
       <TabsContent value="file" className="mt-0">
         <div
-          className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-primary/50 transition-colors"
+          className={`flex flex-col items-center justify-center border-2 border-dashed ${
+            isDragging ? 'border-primary bg-primary/5' : 'border-gray-300'
+          } rounded-lg p-6 cursor-pointer hover:border-primary/50 transition-colors`}
           onClick={triggerFileUpload}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          <Upload className="h-10 w-10 text-gray-400 mb-2" />
+          <Upload className={`h-10 w-10 mb-2 ${isDragging ? 'text-primary' : 'text-gray-400'}`} />
           <p className="text-sm text-gray-600 mb-1">
-            Click to upload or drag and drop
+            {isDragging ? "Drop file here" : "Click to upload or drag and drop"}
           </p>
           <p className="text-xs text-gray-400">
             Support for PDF, DOC, DOCX, TXT files

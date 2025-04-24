@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Home, Settings, User, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { useTheme } from "@/hooks/use-theme";
+import GeminiKeyForm from "./settings/GeminiKeyForm";
 
 const Navbar = () => {
   const [showAuthDialog, setShowAuthDialog] = useState(false);
@@ -60,6 +62,7 @@ const Navbar = () => {
           <span className="font-bold text-xl animate-fade-in">QuickSum</span>
         </Link>
         <div className="flex items-center gap-2">
+          <GeminiKeyForm />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
