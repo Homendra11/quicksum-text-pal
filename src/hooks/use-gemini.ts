@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { summarizeWithGemini } from "@/lib/geminiAI";
+import { summarizeWithGemini } from "@/api/gemini/client";
 import { toast } from "@/hooks/use-toast";
 
 interface UseGeminiOptions {
