@@ -1,4 +1,5 @@
 import { fakeSummarize } from "./summarize";
+import { createWorker } from 'tesseract.js';
 
 // Function to extract text from PDF files
 export const extractTextFromPDF = async (file: File): Promise<string> => {
@@ -129,7 +130,44 @@ The paper also contains a comprehensive literature review, citing over fifty rec
   });
 };
 
-// Function to detect file type and process accordingly
+// Add new function to extract text from images
+export const extractTextFromImage = async (file: File): Promise<string> => {
+  return new Promise(async (resolve) => {
+    try {
+      const worker = await createWorker();
+      
+      // Convert File to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64 = e.target?.result as string;
+          await worker.loadLanguage('eng');
+          await worker.initialize('eng');
+          const { data: { text } } = await worker.recognize(base64);
+          await worker.terminate();
+
+          if (text.trim().length < 50) {
+            resolve(`Extracted text from image "${file.name}". The image appears to contain minimal text content. Please ensure the image has clear, readable text.`);
+          } else {
+            resolve(text);
+          }
+        } catch (error) {
+          console.error("Image OCR error:", error);
+          resolve(`Failed to extract text from image "${file.name}". Please ensure the image contains clear, readable text.`);
+        }
+      };
+      reader.onerror = () => {
+        resolve(`Failed to read the image file "${file.name}". The file might be corrupted or too large.`);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Worker creation error:", error);
+      resolve(`Failed to initialize text extraction for "${file.name}". Please try again with a different image.`);
+    }
+  });
+};
+
+// Update the processFile function to handle images
 export const processFile = async (file: File): Promise<string> => {
   const fileType = file.type;
   const fileName = file.name.toLowerCase();
@@ -159,6 +197,11 @@ export const processFile = async (file: File): Promise<string> => {
       };
       reader.readAsText(file);
     });
+  } else if (
+    fileType.startsWith("image/") || 
+    /\.(jpg|jpeg|png|gif|bmp|webp)$/.test(fileName)
+  ) {
+    return extractTextFromImage(file);
   } else {
     throw new Error(`Unsupported file type: ${fileType || fileName}`);
   }
