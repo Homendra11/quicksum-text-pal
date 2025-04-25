@@ -1,11 +1,13 @@
+
 import React, { useRef, useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Upload } from "lucide-react";
+import { Upload, FileText, MessagesSquare, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { extractTextFromPDF, extractTextFromDOC, processFile } from "@/lib/fileProcessor";
+import { motion } from "framer-motion";
 
 interface ChatItem {
   role: "user" | "assistant";
@@ -21,6 +23,7 @@ const DocumentChat = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
 
   const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -68,10 +71,14 @@ const DocumentChat = () => {
     e.preventDefault();
     const question = input.trim();
     if (!question || !docText) return;
+    
+    // Add user message to chat
     setChat(chat => [...chat, { role: "user", content: question }]);
     setInput("");
     setLoading(true);
+    
     try {
+      console.log("Sending question to chat backend");
       const resp = await fetch("/functions/v1/chat-with-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,14 +88,33 @@ const DocumentChat = () => {
           history: chat.filter(c => c.role === "user" || c.role === "assistant")
         }),
       });
+      
+      if (!resp.ok) {
+        const errorData = await resp.text();
+        console.error("Chat backend error:", errorData);
+        throw new Error(`Error ${resp.status}: ${errorData}`);
+      }
+      
       const data = await resp.json();
+      
       if (data.answer) {
         setChat(chat => [...chat, { role: "assistant", content: data.answer }]);
+      } else if (data.error) {
+        throw new Error(data.error);
       } else {
-        setChat(chat => [...chat, { role: "assistant", content: "Sorry, I couldn't generate an answer." }]);
+        throw new Error("Received empty response from chat backend");
       }
     } catch (err) {
-      setChat(chat => [...chat, { role: "assistant", content: "Error contacting the chat backend." }]);
+      console.error("Chat error:", err);
+      setChat(chat => [...chat, { 
+        role: "assistant", 
+        content: `Sorry, I encountered an error: ${err instanceof Error ? err.message : "Unknown error"}`
+      }]);
+      toast({ 
+        title: "Error", 
+        description: "Failed to get response from chat backend.", 
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }
@@ -105,108 +131,158 @@ const DocumentChat = () => {
     "Explain any complex concept here.",
   ];
 
-  const chatAreaRef = useRef<HTMLDivElement>(null);
-
   React.useEffect(() => {
-    chatAreaRef.current?.scrollTo({ top: chatAreaRef.current.scrollHeight, behavior: "smooth" });
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTo({ top: chatAreaRef.current.scrollHeight, behavior: "smooth" });
+    }
   }, [chat.length]);
 
+  const dropZoneClasses = `
+    flex flex-col gap-4 border-2 border-dashed rounded-lg p-4
+    transition-colors duration-300 ease-in-out
+    ${isUploading ? 'border-primary/50 bg-primary/5' : 'border-border'}
+    dark:border-opacity-50 dark:hover:border-primary/40
+    hover:border-primary/60 hover:bg-primary/5
+  `;
+
   return (
-    <div className="max-w-2xl mx-auto py-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Chat with Your Document</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div 
-            className="flex flex-col gap-4"
-            onDragOver={e => e.preventDefault()}
-            onDrop={onDrop}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={triggerUpload}
-                disabled={isUploading}
-              >
-                <Upload className="h-4 w-4 mr-1" /> Upload PDF/DOC/TXT
-              </Button>
-              <input
-                type="file"
-                ref={fileInput}
-                accept=".pdf,.doc,.docx,.txt"
-                style={{ display: "none" }}
-                onChange={onFileUpload}
-              />
-              <span className="text-xs text-gray-500">{fileName}</span>
-            </div>
-            <Textarea
-              value={docText}
-              onChange={onTextPaste}
-              placeholder="Or paste any paragraph/text here..."
-              className="min-h-28"
-              disabled={isUploading}
-            />
-            <div className="flex flex-wrap gap-2 mt-2">
-              <span className="text-xs text-muted-foreground">Try:</span>
-              {sampleQuestions.map((q, i) => (
-                <Button
-                  key={i}
-                  size="sm"
-                  variant="ghost"
-                  className="text-xs px-2"
-                  onClick={() => setInput(q)}
-                  type="button"
-                  tabIndex={-1}
-                >
-                  {q}
-                </Button>
-              ))}
-            </div>
-            <div className="text-xs text-muted-foreground mt-2">
-              <span>Tip: You can also drag and drop PDF, DOC, or TXT files above.</span>
-            </div>
-          </div>
-          {docText && (
-            <div
-              ref={chatAreaRef}
-              className="border rounded-lg mt-6 mb-3 p-4 bg-muted/30 max-h-80 overflow-y-auto"
-              style={{ minHeight: 120 }}
+    <div className="max-w-2xl mx-auto py-8 px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Card className="dark:bg-background/95 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessagesSquare className="h-5 w-5" />
+              <span>Chat with Your Document</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div 
+              className={dropZoneClasses}
+              onDragOver={(e) => e.preventDefault()}
+              onDragEnter={(e) => e.preventDefault()}
+              onDrop={onDrop}
             >
-              {chat.length === 0 && (
-                <div className="text-muted-foreground text-sm text-center">Ask any question about your document!</div>
-              )}
-              {chat.map((item, i) => (
-                <div key={i} className={`mb-2 text-sm ${item.role === "user" ? "text-right" : "text-left"}`}>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-lg ${
-                      item.role === "user" ? "bg-primary/10 text-primary" : "bg-secondary/60 text-gray-900"
-                    }`}
+              <div className="flex items-center gap-3 mb-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerUpload}
+                  disabled={isUploading}
+                  className="transition-all duration-300"
+                >
+                  <Upload className="h-4 w-4 mr-1" /> Upload PDF/DOC/TXT/Image
+                </Button>
+                <input
+                  type="file"
+                  ref={fileInput}
+                  accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.bmp,.webp"
+                  style={{ display: "none" }}
+                  onChange={onFileUpload}
+                />
+                {fileName && (
+                  <motion.span 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-xs text-muted-foreground"
                   >
-                    {item.content}
-                  </span>
-                </div>
-              ))}
-              {loading && (
-                <div className="italic text-xs text-muted-foreground">Thinking...</div>
-              )}
+                    {fileName}
+                  </motion.span>
+                )}
+                {isUploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+              </div>
+              <Textarea
+                value={docText}
+                onChange={onTextPaste}
+                placeholder="Or paste any paragraph/text here..."
+                className="min-h-28 transition-colors focus:border-primary"
+                disabled={isUploading}
+              />
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="text-xs text-muted-foreground">Try:</span>
+                {sampleQuestions.map((q, i) => (
+                  <Button
+                    key={i}
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs px-2 transition-colors hover:bg-primary/20"
+                    onClick={() => setInput(q)}
+                    type="button"
+                    tabIndex={-1}
+                  >
+                    {q}
+                  </Button>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground mt-2">
+                <span>Tip: You can also drag and drop PDF, DOC, TXT files, or even images above.</span>
+              </div>
             </div>
-          )}
-        </CardContent>
-        <form onSubmit={onSubmit}>
-          <CardFooter className="flex gap-2">
-            <Input
-              placeholder="Ask a question about the document"
-              value={input}
-              disabled={!docText || loading}
-              onChange={e => setInput(e.target.value)}
-              autoFocus
-            />
-            <Button type="submit" disabled={!input.trim() || !docText || loading}>Send</Button>
-          </CardFooter>
-        </form>
-      </Card>
+            {docText && (
+              <div
+                ref={chatAreaRef}
+                className="border rounded-lg mt-6 mb-3 p-4 bg-muted/30 dark:bg-muted/10 max-h-80 overflow-y-auto transition-all"
+                style={{ minHeight: 120 }}
+              >
+                {chat.length === 0 && (
+                  <div className="text-muted-foreground text-sm text-center">Ask any question about your document!</div>
+                )}
+                {chat.map((item, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 * i }}
+                    className={`mb-2 text-sm ${item.role === "user" ? "text-right" : "text-left"}`}
+                  >
+                    <span
+                      className={`inline-block px-3 py-1 rounded-lg ${
+                        item.role === "user" 
+                          ? "bg-primary/20 text-primary dark:bg-primary/30 dark:text-primary-foreground" 
+                          : "bg-secondary/80 text-secondary-foreground dark:bg-secondary/40"
+                      } transition-colors`}
+                    >
+                      {item.content}
+                    </span>
+                  </motion.div>
+                ))}
+                {loading && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                  >
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Processing your question...</span>
+                  </motion.div>
+                )}
+              </div>
+            )}
+          </CardContent>
+          <form onSubmit={onSubmit}>
+            <CardFooter className="flex gap-2">
+              <Input
+                placeholder="Ask a question about the document"
+                value={input}
+                disabled={!docText || loading}
+                onChange={e => setInput(e.target.value)}
+                className="transition-colors focus-visible:ring-primary"
+                autoFocus
+              />
+              <Button 
+                type="submit" 
+                disabled={!input.trim() || !docText || loading}
+                className="transition-transform active:scale-95"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </motion.div>
     </div>
   );
 };
